@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPLIDAR C1 实时显示（12米检测）</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .status {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .status-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-item label {
+            display: block;
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .status-item .value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 700px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: white;
+            border-radius: 15px;
+        }
+
+        #radarCanvas {
+            max-width: 650px;
+            max-height: 650px;
+        }
+
+        .connection-status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .connection-status.connected {
+            background: #4caf50;
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 RPLIDAR C1 实时显示</h1>
+        <div class="subtitle">检测距离：12米以内 | 360度全方位扫描</div>
+
+        <div class="connection-status disconnected" id="connectionStatus">
+            🔴 未连接
+        </div>
+
+        <div class="status">
+            <div class="status-grid">
+                <div class="status-item">
+                    <label>数据点数</label>
+                    <div class="value" id="totalPoints">0</div>
+                </div>
+                <div class="status-item">
+                    <label>当前缓冲</label>
+                    <div class="value" id="currentPoints">0</div>
+                </div>
+                <div class="status-item">
+                    <label>平均距离</label>
+                    <div class="value" id="avgDistance">0.00m</div>
+                </div>
+                <div class="status-item">
+                    <label>最小距离</label>
+                    <div class="value" id="minDistance">0.00m</div>
+                </div>
+                <div class="status-item">
+                    <label>最大距离</label>
+                    <div class="value" id="maxDistance">0.00m</div>
+                </div>
+                <div class="status-item">
+                    <label>运行时间</label>
+                    <div class="value" id="uptime">0s</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="radarCanvas" width="650" height="650"></canvas>
+        </div>
+
+        <div class="footer">
+            RPLIDAR C1 激光雷达 | 网页实时显示版本
+        </div>
+    </div>
+
+    <script>
+        // WebSocket连接
+        const socket = io();
+
+        // 连接状态
+        const statusElement = document.getElementById('connectionStatus');
+
+        socket.on('connect', function() {
+            console.log('已连接到服务器');
+            statusElement.textContent = '🟢 已连接';
+            statusElement.className = 'connection-status connected';
+        });
+
+        socket.on('disconnect', function() {
+            console.log('与服务器断开');
+            statusElement.textContent = '🔴 未连接';
+            statusElement.className = 'connection-status disconnected';
+        });
+
+        // ========== 自定义极坐标雷达图 ==========
+        const canvas = document.getElementById('radarCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const maxDistance = 12; // 最大显示距离（米）
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 50; // 留出边距
+        
+        // 绘制极坐标网格
+        function drawPolarGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 设置抗锯齿
+            ctx.imageSmoothingEnabled = true;
+            
+            // 绘制标题（使用中文字体）
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 18px "Microsoft YaHei", "SimHei", Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('RPLIDAR C1 实时扫描', centerX, 25);
+            
+            // 绘制同心圆（距离圆）
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            ctx.fillStyle = '#666';
+            ctx.font = '12px Arial, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            
+            const circles = [2, 4, 6, 8, 10, 12];
+            circles.forEach(dist => {
+                const r = (dist / maxDistance) * radius;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // 标注距离（在右侧90度位置）
+                ctx.fillText(dist.toString(), centerX + r + 8, centerY);
+            });
+            
+            // 绘制角度线和标签
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            ctx.fillStyle = '#333';
+            ctx.font = '13px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+            const labels = ['0°', '45°', '90°', '135°', '180°', '225°', '270°', '315°'];
+            
+            angles.forEach((angle, index) => {
+                const rad = (angle - 90) * Math.PI / 180; // 0度在上方
+                const x = centerX + Math.cos(rad) * radius;
+                const y = centerY + Math.sin(rad) * radius;
+                
+                // 绘制角度线
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                
+                // 绘制角度标签（稍微往外偏移）
+                const labelX = centerX + Math.cos(rad) * (radius + 25);
+                const labelY = centerY + Math.sin(rad) * (radius + 25);
+                
+                // 根据位置调整文字对齐方式
+                if (angle === 0 || angle === 180) {
+                    ctx.textAlign = 'center';
+                } else if (angle > 0 && angle < 180) {
+                    ctx.textAlign = 'left';
+                } else {
+                    ctx.textAlign = 'right';
+                }
+                
+                if (angle === 90 || angle === 270) {
+                    ctx.textBaseline = 'middle';
+                } else if (angle > 90 && angle < 270) {
+                    ctx.textBaseline = 'top';
+                } else {
+                    ctx.textBaseline = 'bottom';
+                }
+                
+                ctx.fillText(labels[index], labelX, labelY);
+            });
+            
+            // 重置文字对齐
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 绘制中心点
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // 绘制雷达数据点
+        function drawRadarPoints(points) {
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+            
+            points.forEach(point => {
+                const angle = point.angle;
+                const distance = point.distance;
+                
+                // 转换极坐标到屏幕坐标（0度在上方）
+                const rad = (angle - 90) * Math.PI / 180;
+                const r = (distance / maxDistance) * radius;
+                const x = centerX + Math.cos(rad) * r;
+                const y = centerY + Math.sin(rad) * r;
+                
+                // 绘制数据点
+                ctx.beginPath();
+                ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // 数据缓冲区
+        let radarData = [];
+        let pendingUpdate = false;
+
+        // 初始化：绘制网格
+        drawPolarGrid();
+
+        // 接收初始化数据
+        socket.on('init_data', function(data) {
+            console.log('接收初始数据:', data.points.length, '个点');
+            radarData = data.points;
+            requestRadarUpdate();
+        });
+
+        // 接收全量扫描数据（主要接收方式）
+        socket.on('scan_data_full', function(data) {
+            // 调试信息（可在浏览器控制台查看）
+            if (Math.random() < 0.1) {  // 只打印10%的消息，避免刷屏
+                console.log('收到数据:', data.points.length, '个点');
+            }
+            radarData = data.points;
+            requestRadarUpdate();
+        });
+
+        // 请求雷达更新（使用requestAnimationFrame优化渲染）
+        function requestRadarUpdate() {
+            if (!pendingUpdate) {
+                pendingUpdate = true;
+                requestAnimationFrame(updateRadar);
+            }
+        }
+
+        // 更新雷达显示
+        function updateRadar() {
+            pendingUpdate = false;
+            
+            // 重绘网格和数据
+            drawPolarGrid();
+            drawRadarPoints(radarData);
+        }
+
+        // 接收统计信息
+        socket.on('statistics', function(stats) {
+            document.getElementById('totalPoints').textContent = stats.total_points.toLocaleString();
+            document.getElementById('currentPoints').textContent = stats.current_points;
+            document.getElementById('avgDistance').textContent = stats.avg_distance.toFixed(3) + 'm';
+            document.getElementById('minDistance').textContent = stats.min_distance.toFixed(3) + 'm';
+            document.getElementById('maxDistance').textContent = stats.max_distance.toFixed(3) + 'm';
+            
+            // 格式化运行时间
+            const uptime = Math.floor(stats.uptime);
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            const seconds = uptime % 60;
+            
+            let uptimeStr = '';
+            if (hours > 0) {
+                uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
+            } else if (minutes > 0) {
+                uptimeStr = `${minutes}m ${seconds}s`;
+            } else {
+                uptimeStr = `${seconds}s`;
+            }
+            
+            document.getElementById('uptime').textContent = uptimeStr;
+        });
+
+        // 绘制圆形参考线（1m, 2m, 3m）
+        function drawReferenceCircles() {
+            const canvas = document.getElementById('radarChart');
+            const ctx = canvas.getContext('2d');
+            
+            // 这部分需要在Chart.js渲染后绘制
+            // 可以使用Chart.js的插件系统
+        }
+
+        // 页面加载完成
+        console.log('RPLIDAR C1 网页可视化已加载');
+    </script>
+</body>
+</html>
+

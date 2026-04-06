@@ -1,0 +1,96 @@
+/**
+ * RPLIDAR雷达可视化模块 - 样式文件（可选）
+ * 
+ * 如果需要自定义样式，可以引入这个CSS文件
+ * 或者直接使用自己的样式
+ */
+
+/* 雷达容器 */
+.rplidar-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+/* Canvas样式 */
+.rplidar-canvas {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* 统计面板 */
+.rplidar-stats {
+    margin-top: 15px;
+    padding: 15px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+    font-family: Arial, sans-serif;
+    min-width: 400px;
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
+.rplidar-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    font-size: 12px;
+}
+
+.rplidar-stats-item label {
+    opacity: 0.8;
+    font-size: 11px;
+}
+
+.rplidar-stats-item .value {
+    font-size: 18px;
+    font-weight: bold;
+    margin-top: 5px;
+}
+
+/* 连接状态指示器 */
+.rplidar-status {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.rplidar-status.connected {
+    background: #4caf50;
+    color: white;
+}
+
+.rplidar-status.disconnected {
+    background: #f44336;
+    color: white;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .rplidar-container {
+        padding: 10px;
+    }
+    
+    .rplidar-canvas {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    .rplidar-stats {
+        min-width: auto;
+        width: 100%;
+    }
+    
+    .rplidar-stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

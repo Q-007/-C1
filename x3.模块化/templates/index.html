@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPLIDAR C1 模块化示例</title>
+    <link rel="stylesheet" href="/static/rplidar-widget.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        #status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        
+        #status.connected {
+            background: #4caf50;
+            color: white;
+        }
+        
+        #status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 RPLIDAR C1 模块化示例</h1>
+        <div class="subtitle">使用 RPLidarWidget 模块快速集成雷达可视化</div>
+        
+        <div id="status" class="disconnected">🔴 未连接</div>
+        
+        <!-- 雷达显示容器 -->
+        <div id="radar-container"></div>
+    </div>
+
+    <!-- 引入Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- 引入RPLidar模块 -->
+    <script src="/static/rplidar-widget.js"></script>
+    
+    <!-- 初始化雷达 -->
+    <script>
+        // 创建雷达可视化组件
+        const radar = new RPLidarWidget('radar-container', {
+            maxDistance: 12,        // 最大显示距离12米
+            width: 650,             // Canvas宽度
+            height: 650,            // Canvas高度
+            showStats: true,        // 显示统计信息
+            title: 'RPLIDAR C1 实时扫描',  // 标题
+            pointColor: 'rgba(255, 0, 0, 0.7)',  // 数据点颜色
+            pointSize: 2.5,         // 数据点大小
+            
+            // 连接成功回调
+            onConnect: function() {
+                console.log('雷达已连接');
+                document.getElementById('status').textContent = '🟢 已连接';
+                document.getElementById('status').className = 'connected';
+            },
+            
+            // 断开连接回调
+            onDisconnect: function() {
+                console.log('雷达已断开');
+                document.getElementById('status').textContent = '🔴 未连接';
+                document.getElementById('status').className = 'disconnected';
+            }
+        });
+        
+        // 示例：动态更新配置
+        // radar.updateOptions({ maxDistance: 6 });
+        
+        // 示例：销毁组件
+        // radar.destroy();
+    </script>
+</body>
+</html>
